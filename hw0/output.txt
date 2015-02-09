@@ -2,6 +2,6 @@
 name:
    first: Lara
    last: Martin
-email: ljamrtin@cmu.edu
+email: ljmartin@cmu.edu
 leaderboard: ladognome
 languages: [eng,spa]

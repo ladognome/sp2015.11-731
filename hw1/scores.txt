@@ -1,0 +1,16 @@
+Dice
+n = 1000
+Precision = 0.136701
+Recall = 0.466878
+AER = 0.793718
+
+n = 10000
+Precision = 0.149023
+Recall = 0.378788
+AER = 0.789858
+
+IBM 1
+n = 100
+Precision = 0.298238
+Recall = 0.329575
+AER = 0.687471
