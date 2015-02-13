@@ -1,0 +1,104 @@
+#!/usr/bin/env python
+import optparse
+import sys
+from collections import defaultdict
+import random
+from nltk.tag.stanford import POSTagger
+
+optparser = optparse.OptionParser()
+optparser.add_option("-b", "--bitext", dest="bitext", default="data/dev-test-train.de-en", help="Parallel corpus (default data/dev-test-train.de-en)")
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
+optparser.add_option("-i", "--iterations",dest="iterations",default=1,type="int",help="Number of iterations of EM")
+(opts, _) = optparser.parse_args()
+
+english_postagger = POSTagger('postagger/models/english-bidirectional-distsim.tagger', 'postagger/stanford-postagger.jar', encoding='utf-8')
+german_postagger = POSTagger('postagger/models/german-hgc.tagger', 'postagger/stanford-postagger.jar', encoding='utf-8')
+#POS = [u'CC',u'CD',u'DT',u'EX',u'FW',u'IN',u'JJ',u'JJR',u'JJS',u'LS', u'MD', 'NN', 'NNS', 'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$', 'RB','RBR','RBS','RP','SYM','TO','UH','VB','VBD','VBG','VBN','VBP','VBZ','WDT','WP','WP$','WRB']
+sys.stderr.write("Reading in the data...")
+bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')] for pair in open(opts.bitext)][:opts.num_sents]
+
+#splitting
+
+total_count = defaultdict(list)
+sentences = []
+#pos tagging
+sys.stderr.write("\nIncorporating POS Tags...")
+for n, (f,e) in enumerate(bitext):
+	T = defaultdict(lambda: [[],[]])
+	TAG = ""
+	#f is 0
+	#e is 1
+	e_pos = english_postagger.tag(e)
+	f_pos = german_postagger.tag(f)
+	for j,e_j in enumerate(e):
+		e_j_pos = e_pos[j][1]
+		if e_j_pos in T:
+			T[e_j_pos][1].append(e_j)
+			continue
+		TAG = e_j_pos
+		T[e_j_pos][1].append(e_j)
+		for k, f_k in enumerate(f):
+			f_k_pos = f_pos[k][1]
+			if f_k_pos == TAG or (f_k_pos == 'ART' and TAG == 'DT'):
+				T[TAG][0].append(f_k)
+				del f[k] #remove hk from sentence Hi
+				del f_pos[k]
+		#if no target words have the same tag
+		if T[TAG][0] == []:
+			T[TAG][0] = None
+	if not f == []:
+		for k, f_k in enumerate(f):
+			TAG = f_pos[k][1]
+			T[TAG][1] = None
+			T[TAG][0].append(f_k) #append hk to list Hl
+	sentences.append(T)
+
+#############IBM Model 1 With Tag Pairs##############
+p = dict()
+for n, dictionary  in enumerate(sentences):
+	for TAG, [f,e] in dictionary.iteritems():
+		if f:
+			for f_k in f:
+				if e:
+					for e_i in e:
+						total_count[f_k].append(e_i)
+for key in total_count.keys():		
+	l = len(total_count[key]) #number of English words for f_j
+	p[key] = defaultdict(lambda: 1.0/l)
+
+sys.stderr.write("\nTraining with IBM Model 1...")
+for i in range (opts.iterations):
+	count = defaultdict(lambda: defaultdict(float))
+	for sentDict in sentences:
+		for TAG, [f,e] in sentDict.iteritems():
+			if e:
+				for e_i in e:
+					norm_e = 0
+					if f:
+						for f_j in f:
+							norm_e+=p[f_j][e_i]
+						for f_j in f:
+							count[f_j][e_i] += p[f_j][e_i]/norm_e
+						
+		if n % 500 == 0: sys.stderr.write(".")
+	for f in count.keys():
+		norm = float(sum(count[f][e] for e in total_count[f]))
+		for e in total_count[f]:
+			p[f][e] = count[f][e]/norm
+
+sys.stderr.write("\nCalculating predicted values...")
+#output & thresholding
+for n, (f,e) in enumerate(bitext):
+	alignment = []
+	for i, e_i in enumerate(e):
+		pmax = 0
+		maxi = 0
+		for j, f_j in enumerate(f):
+			if p[f_j][e_i] > pmax:
+				pmax = p[f_j][e_i]
+				maxi = j
+		alignment.append('{}-{}'.format(maxi,i))
+	print '  '.join(alignment)
+#	if n % 500 == 0: sys.stderr.write(".")
+	if n == 500: break
+

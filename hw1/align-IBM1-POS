@@ -1,0 +1,103 @@
+#!/usr/bin/env python
+import optparse, sys
+from nltk.tag.stanford import POSTagger
+from collections import defaultdict
+optparser = optparse.OptionParser()
+optparser.add_option("-b", "--bitext", dest="bitext", default="data/dev-test-train.de-en", help="Parallel corpus (default data/dev-test-train.de-en)")
+optparser.add_option("-t", "--threshold", dest="threshold", default=0.5, type="float", help="Threshold for aligning with Dice's coefficient (default=0.5)") #sets default T
+optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxint, type="int", help="Number of sentences to use for training and alignment")
+optparser.add_option("-i", "--iterations",dest="iterations",default=1,type="int",help="Number of iterations of EM")
+(opts, _) = optparser.parse_args()
+
+english_postagger = POSTagger('postagger/models/english-bidirectional-distsim.tagger', 'postagger/stanford-postagger.jar', encoding='utf-8')
+german_postagger = POSTagger('postagger/models/german-hgc.tagger', 'postagger/stanford-postagger.jar', encoding='utf-8')
+POS = ['CC','CD','DT','EX','FW','IN','JJ','JJR','JJS','LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$', 'RB','RBR','RBS','RP','SYM','TO','UH','VB','VBD','VBG','VBN','VBP','VBZ','WDT','WP','WP$','WRB']
+
+bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')] for pair in open(opts.bitext)][:opts.num_sents]
+
+co_occur = defaultdict(set)
+co_occur_pos = defaultdict(set)
+
+orig = bitext
+f_vocab = set()
+
+#changed = False
+#split = []
+sys.stderr.write("Reading in the data...")
+for n, (f,e) in enumerate(bitext):
+#	fsplit = []
+#	changed = False
+	for j, f_j in enumerate(f):
+#		compound = False
+		for i in range(len(f_j)):
+#			if (f_j[:i] in f_vocab) and (f_j[i:] in f_vocab):
+#				fsplit.append(f_j[:i])
+#				fsplit.append(f_j[i:])
+#				changed = True
+#				compound = True
+#		if compound == False:
+#			fsplit.append(f_j)
+	if n % 500 == 0: sys.stderr.write(".")
+	split.append(fsplit)
+	if changed:
+		changed = False
+
+POS_sents = {}
+sys.stderr.write("\nTagging parts of speech and counting co-occurences (please be patient)...")
+for (n, (f,e)) in enumerate(bitext):
+	e_pos = english_postagger.tag(e)
+	f_pos = german_postagger.tag(f)
+	POS_sents[n] = (f_pos, e_pos)
+	for j, e_j in enumerate(e):
+		for i, f_i in enumerate(f):
+			co_occur[f_i].add(e_j)
+			e_j_pos = e_pos[j][1]
+			f_i_pos = f_pos[i][1]
+			co_occur_pos[f_i_pos].add(e_j_pos)
+	if n % 500 == 0: sys.stderr.write(".")
+
+sys.stderr.write("\nInitializing EM probabilities...")
+p = dict()
+p_pos = dict()
+for f_j in co_occur.keys():
+	l = len(co_occur[f_j])
+	p[f_j] = defaultdict(lambda: 1.0/l)
+for f_j in co_occur_pos.keys():
+	l = len(co_occur_pos[f_j])
+	p_pos[f_j] = defaultdict(lambda: 1.0/l)
+
+sys.stderr.write("\nTraining with IBM Model 1 including parts of speech...")
+for i in range (opts.iterations):
+	count = defaultdict(lambda: defaultdict(float))
+	for(n, (f,e)) in enumerate(bitext):
+		c= 1.0/len(f)
+		(f_pos, e_pos) = POS_sents[n]
+		for i, e_i in enumerate(e):
+			e_i_pos = e_pos[i][1]
+			norm_e = 0
+			for j, f_j in enumerate(f):
+				f_j_pos = f_pos[j][1]
+				norm_e+=p[f_j][e_i]+p_pos[f_j_pos][e_j_pos]
+			for j, f_j in enumerate(f):
+				f_j_pos = f_pos[j][1]
+				count[f_j][e_i] += (p_pos[f_j_pos][e_j_pos]+p[f_j][e_i])/norm_e
+		if n % 500 == 0: sys.stderr.write(".")
+	for f in count.keys():
+		norm = float(sum(count[f][e] for e in co_occur[f]))
+		for e in co_occur[f]:
+			p[f][e] = count[f][e]/norm
+
+sys.stderr.write("\nCalculating predicted values...")
+#output & thresholding
+for (n, (f,e)) in enumerate(bitext):
+	alignment = []
+	for i, e_i in enumerate(e):
+		pmax = 0
+		maxi = 0
+		for j, f_j in enumerate(f):
+			if p[f_j][e_i] > pmax:
+				pmax = p[f_j][e_i]
+				maxi = j
+		alignment.append('{}-{}'.format(maxi,i))
+	print '  '.join(alignment)
+	if n == 500: break

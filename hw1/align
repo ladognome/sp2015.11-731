@@ -2,6 +2,7 @@
 import optparse
 import sys
 from collections import defaultdict
+import GermanStemmer
 
 optparser = optparse.OptionParser()
 optparser.add_option("-b", "--bitext", dest="bitext", default="data/dev-test-train.de-en", help="Parallel corpus (default data/dev-test-train.de-en)")
@@ -10,25 +11,21 @@ optparser.add_option("-n", "--num_sentences", dest="num_sents", default=sys.maxi
 optparser.add_option("-i", "--iterations",dest="iterations",default=1,type="int",help="Number of iterations of EM")
 (opts, _) = optparser.parse_args()
 
+sys.stderr.write("Reading in File...")
 bitext = [[sentence.strip().split() for sentence in pair.split(' ||| ')] for pair in open(opts.bitext)][:opts.num_sents]
 
 co_occur = defaultdict(set)
 orig = bitext
 f_vocab = set()
 
+sys.stderr.write("\nStemming German words...")
 for(f,e) in bitext:
 	for f_j in f:
-		if(len(f_j) > 2):
-			f_vocab.add(f_j)
-		if f_j[-2:] == "en":
-			f_j = f_j[:-2]
-	for e_i in e:
-		if e_i[-1] == "s":
-			e_i = e_i[:-1] 
+		f_vocab.add(GermanStemmer.stem(f_j))
 
 changed = False
 split = []
-sys.stderr.write("Reading in the data...")
+sys.stderr.write("\nReading in the data...")
 for n, (f,e) in enumerate(bitext):
 	fsplit = []
 	changed = False
@@ -70,7 +67,6 @@ for i in range (opts.iterations):
 				norm_e+=p[f_j][e_i]
 			for f_j in f:
 				count[f_j][e_i] += p[f_j][e_i]/norm_e
-		if n % 500 == 0: sys.stderr.write(".")
 	for f in count.keys():
 		norm = float(sum(count[f][e] for e in co_occur[f]))
 		for e in co_occur[f]:
@@ -89,4 +85,3 @@ for (f,e) in bitext:
 				maxi = j
 		alignment.append('{}-{}'.format(maxi,i))
 	print '  '.join(alignment)
-	if n % 500 == 0: sys.stderr.write(".")
