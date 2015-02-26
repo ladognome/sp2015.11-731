@@ -7,21 +7,26 @@ from nltk.corpus import wordnet as wn
 # DRY
 def word_matches(h, ref):
 	total = 0
-#	print h
-#	print ref
-#	quit()
 	for w in h:
-#		hyp = wn.synsets(w)[0]
 		if w in ref:
 			total+=1
-#		else:
-#			for r in ref:
-				#see how similar they are in wordnet
-#				print(ref)
-#				sim = wn.path_similarity(hyp, wn.synsets(r)[0])
-#				if (sim > 0.1):
-#					total+=sim
-				#TODO: check to see if the same POS
+			continue
+		hyp = wn.synsets(w)
+		if hyp:
+			h_syn = hyp[0]
+		else:
+			continue
+		for r in ref:
+			#see how similar they are in wordnet
+			rr = wn.synsets(r)
+			if rr:
+				r_syn = rr[0]
+			else:
+				continue			
+			sim = wn.path_similarity(h_syn, r_syn)
+			if (sim > 0.1):
+				total+=sim
+			#TODO: check to see if the same POS
 	return total
 #    return sum(1 for w in h (if w in ref or w in )
     # or sum(w in ref for w in f) # cast bool -> int
