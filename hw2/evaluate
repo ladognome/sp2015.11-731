@@ -1,10 +1,29 @@
 #!/usr/bin/env python
 import argparse # optparse is deprecated
 from itertools import islice # slicing for iterators
+import re
+from nltk.corpus import wordnet as wn
  
 # DRY
 def word_matches(h, ref):
-    return sum(1 for w in h if w in ref)
+	total = 0
+#	print h
+#	print ref
+#	quit()
+	for w in h:
+#		hyp = wn.synsets(w)[0]
+		if w in ref:
+			total+=1
+#		else:
+#			for r in ref:
+				#see how similar they are in wordnet
+#				print(ref)
+#				sim = wn.path_similarity(hyp, wn.synsets(r)[0])
+#				if (sim > 0.1):
+#					total+=sim
+				#TODO: check to see if the same POS
+	return total
+#    return sum(1 for w in h (if w in ref or w in )
     # or sum(w in ref for w in f) # cast bool -> int
     # or sum(map(ref.__contains__, h)) # ugly!
  
@@ -22,7 +41,8 @@ def main():
     def sentences():
         with open(opts.input) as f:
             for pair in f:
-                yield [sentence.strip().split() for sentence in pair.split(' ||| ')]
+		#fixed preprocessing to remove punctuation and make lowercase
+                yield [re.findall(r"[\w']+",sentence.lower().strip()) for sentence in pair.split(' ||| ')]
  
     # note: the -n option does not work in the original code
     for h1, h2, ref in islice(sentences(), opts.num_sentences):
