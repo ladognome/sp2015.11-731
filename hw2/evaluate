@@ -5,7 +5,7 @@ import re
 from collections import Counter
 from nltk.stem.lancaster import *
 
-function_words = ["you", "i", "to", "the", "a", "and", "that", "it", "of", "me", "what", "is", "in", "this", "know",  "for", "no", "have", "my", "don", "just", "not", "do", "be", "on", "your", "was", "we", "with", "so", "but", "all", "well", "are", "he", "oh", "about", "right", "d", "ll", "ve", "m", "s", "t"]
+function_words = ["you", "i", "to", "the", "a", "and", "that", "it", "of", "me", "what", "is", "in", "this", "for", "no", "have", "my", "don", "just", "not", "do", "be", "on", "your", "was", "we", "with", "so", "but", "all", "well", "are",  "oh", "about", "d", "ll", "ve", "m", "s", "t", "right", "know"]
 
 stemmer = LancasterStemmer()
 C_function = Counter(function_words)
