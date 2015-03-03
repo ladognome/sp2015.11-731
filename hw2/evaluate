@@ -2,43 +2,12 @@
 import argparse # optparse is deprecated
 from itertools import islice # slicing for iterators
 import re
-#from nltk.corpus import wordnet as wn
 from collections import Counter
-#from nltk.stem.porter import *
 from nltk.stem.lancaster import *
 
-function_words = ["you", "i", "to", "the", "a", "and", "that", "it", "of", "me", "what", "is", "in", "this", "know", "i'm", "for", "no", "have", "my", "don't", "just", "not", "do", "be", "on", "your", "was", "we", "it's", "with", "so", "but", "all", "well", "are", "he", "oh", "about", "right"]
+function_words = ["you", "i", "to", "the", "a", "and", "that", "it", "of", "me", "what", "is", "in", "this", "know",  "for", "no", "have", "my", "don", "just", "not", "do", "be", "on", "your", "was", "we", "with", "so", "but", "all", "well", "are", "he", "oh", "about", "right", "d", "ll", "ve", "m", "s", "t"]
 
-#stemmer = PorterStemmer()
 stemmer = LancasterStemmer()
-
-def word_matches(h, ref):
-	total = 0
-	for w in h:
-#		print w
-		if w in ref:
-			total+=1
-			continue
-		hyp = wn.synsets(w)
-		if hyp:
-			h_syn = hyp[0]
-		else:
-			continue
-		for r in ref:
-			#see how similar they are in wordnet
-			rr = wn.synsets(r)
-			if rr:
-				r_syn = rr[0]
-			else:
-				continue			
-			sim = wn.path_similarity(h_syn, r_syn)
-			if (sim > 0.1):
-				total+=sim
-			#TODO: check to see if the same POS
-	return total
-
-
-
 C_function = Counter(function_words)
 for item in C_function.keys():
 	C_function[item] = 10
@@ -79,8 +48,7 @@ def main():
 		with open(opts.input) as f:
 			for pair in f:
 		#fixed preprocessing to remove punctuation and make lowercase
-				yield [re.findall(r"[\w']+",sentence) for sentence in re.sub("\/"," ",re.sub("&quot;","",pair.lower().strip())).decode('unicode_escape').encode('ascii','ignore').split(' ||| ')]
-# 				yield [sentence.strip().split() for sentence in pair.lower().split(' ||| ')]
+				yield [re.findall(r"[\w]+",sentence) for sentence in re.sub("\/"," ",re.sub("&quot;","",pair.lower().strip())).decode('unicode_escape').encode('ascii','ignore').split(' ||| ')]
 	# note: the -n option does not work in the original code
 	for h1, h2, ref in islice(sentences(), opts.num_sentences):
 		hyp1 = []
@@ -92,12 +60,6 @@ def main():
 			hyp2.append(stemmer.stem(h))
 		for r in ref:
 			reference.append(stemmer.stem(r))
-#		rset = set(ref)
-#		h1_match = word_matches(h1, rset)
-#		h2_match = word_matches(h2, rset)
-#		print(-1 if h1_match > h2_match else # \begin{cases}
-#				(0 if h1_match == h2_match
-#					else 1)) # \end{cases}
 		h1_val = meteor(hyp1, reference, opts.alpha, opts.delta)
 		h2_val = meteor(hyp2, reference, opts.alpha, opts.delta)
 	
