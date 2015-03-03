@@ -4,11 +4,13 @@ from itertools import islice # slicing for iterators
 import re
 #from nltk.corpus import wordnet as wn
 from collections import Counter
-from nltk.stem.porter import *
- 
+#from nltk.stem.porter import *
+from nltk.stem.lancaster import *
+
 function_words = ["you", "i", "to", "the", "a", "and", "that", "it", "of", "me", "what", "is", "in", "this", "know", "i'm", "for", "no", "have", "my", "don't", "just", "not", "do", "be", "on", "your", "was", "we", "it's", "with", "so", "but", "all", "well", "are", "he", "oh", "about", "right"]
 
-stemmer = PorterStemmer()
+#stemmer = PorterStemmer()
+stemmer = LancasterStemmer()
 
 def word_matches(h, ref):
 	total = 0
