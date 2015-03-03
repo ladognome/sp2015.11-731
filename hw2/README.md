@@ -19,4 +19,8 @@ Until the deadline the scores shown on the leaderboard will be accuracy on the t
 
 Steps tried:
 Basic
-Wordnet
+preprocessing (remove punctuation, lowercase) +
+Meteor metric +
+wordnet -
+stemming +
+
