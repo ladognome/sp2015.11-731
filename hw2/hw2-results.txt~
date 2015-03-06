@@ -152,7 +152,7 @@ True y= 0	1480	549	1387
 True y= 1	4261	628	6537
 Accuracy = 0.523199
 
-With a=0.7, d=0.8, Lancaster stemming, splitting ' and removing endings:
+With a=0.7, d=0.8, Lancaster stemming, splitting ' and removing endings: ***
 	  Pred. y=-1	y=0	y=1
 True y=-1	6614	657	4095
 True y= 0	1466	579	1371
@@ -187,7 +187,7 @@ True y= 0	1463	580	1373
 True y= 1	4209	643	6574
 Accuracy = 0.525031
 
-Original list minus "he": ***
+Original list minus "he":
 	  Pred. y=-1	y=0	y=1
 True y=-1	6618	663	4085
 True y= 0	1462	587	1367
