@@ -1,0 +1,196 @@
+Base:
+	  Pred. y=-1	y=0	y=1
+True y=-1	5325	2554	3487
+True y= 0	1159	1104	1153
+True y= 1	3583	2510	5333
+Accuracy = 0.448794
+
+Removed punctuation, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	5378	2539	3449
+True y= 0	1126	1194	1096
+True y= 1	3487	2583	5356
+Accuracy = 0.455128
+
+With word similarity:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6219	514	4633
+True y= 0	1401	588	1427
+True y= 1	4642	522	6262
+Accuracy = 0.498665
+
+With Meteor(a=.5,d=.5), removed punct, lowercase:
+Pred. y=-1	y=0	y=1
+True y=-1	6480	691	4195
+True y= 0	1510	501	1405
+True y= 1	4259	705	6462
+Accuracy = 0.512935
+
+With Meteor(a=.3,d=.5), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6477	674	4215
+True y= 0	1521	498	1397
+True y= 1	4275	697	6454
+Accuracy = 0.512401
+
+With Meteor(a=.7,d=.5), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6497	671	4198
+True y= 0	1506	498	1412
+True y= 1	4264	690	6472
+Accuracy = 0.513851
+
+With Meteor(a=.7,d=.2), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6376	551	4439
+True y= 0	1541	465	1410
+True y= 1	4567	566	6293
+Accuracy = 0.501145
+
+With Meteor(a=1,d=1), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	5120	3296	2950
+True y= 0	1137	1290	989
+True y= 1	3193	3322	4911
+Accuracy = 0.431967
+
+With Meteor(a=.7,d=.7), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6559	550	4257
+True y= 0	1521	464	1431
+True y= 1	4339	560	6527
+Accuracy = 0.517018
+
+With Meteor(a=.7,d=.9), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6520	550	4296
+True y= 0	1509	465	1442
+True y= 1	4392	562	6472
+Accuracy = 0.513469
+
+With Meteor(a=.7,d=.8), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6540	549	4277
+True y= 0	1532	463	1421
+True y= 1	4330	557	6539
+Accuracy = 0.516712
+
+With Meteor(a=.8,d=.7), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6566	546	4254
+True y= 0	1527	462	1427
+True y= 1	4348	553	6525
+Accuracy = 0.517132
+
+With Meteor(a=.85,d=.7), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6567	546	4253
+True y= 0	1523	462	1431
+True y= 1	4341	553	6532
+Accuracy = 0.517437
+
+With Meteor(a=.9,d=.7), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6562	546	4258
+True y= 0	1529	462	1425
+True y= 1	4347	553	6526
+Accuracy = 0.517018
+
+With Meteor(a=.85,d=.75), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6561	550	4255
+True y= 0	1522	464	1430
+True y= 1	4346	557	6523
+Accuracy = 0.516941
+
+With Meteor(a=.85,d=.65), removed punct, lowercase:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6560	555	4251
+True y= 0	1523	463	1430
+True y= 1	4340	557	6529
+Accuracy = 0.517094
+
+With Meteor(a=.85, d=.7), removed punct, lowercase, wordnet:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6436	241	4689
+True y= 0	1482	428	1506
+True y= 1	4790	226	6410
+Accuracy = 0.506487
+
+With Meteor(a=.85, d=.7), no punct, lowercase, porter stemming:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6597	652	4117
+True y= 0	1483	548	1385
+True y= 1	4271	627	6528
+Accuracy = 0.521711
+
+With a=0.7, d=0.8:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6603	651	4112
+True y= 0	1484	550	1382
+True y= 1	4245	628	6553
+Accuracy = 0.522970
+
+With a=0.7, d=0.8, Lancaster stemming:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6615	647	4104
+True y= 0	1469	566	1381
+True y= 1	4217	639	6570
+Accuracy = 0.524687
+
+With a=.85, d=.7, Lancaster:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6585	651	4130
+True y= 0	1477	564	1375
+True y= 1	4249	639	6538
+Accuracy = 0.522245
+
+With a=0.7, d=0.8, Snowball stemming:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6626	640	4100
+True y= 0	1480	549	1387
+True y= 1	4261	628	6537
+Accuracy = 0.523199
+
+With a=0.7, d=0.8, Lancaster stemming, splitting ' and removing endings: ***
+	  Pred. y=-1	y=0	y=1
+True y=-1	6614	657	4095
+True y= 0	1466	579	1371
+True y= 1	4205	647	6574
+Accuracy = 0.525298
+
+With a=0.7, d=0.85:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6590	668	4108
+True y= 0	1458	578	1380
+True y= 1	4214	655	6557
+Accuracy = 0.523695
+
+With a=0.6, d=0.8:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6596	662	4108
+True y= 0	1459	577	1380
+True y= 1	4209	653	6564
+Accuracy = 0.524153
+
+Removed "right" and "know" from stop list:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6613	657	4096
+True y= 0	1465	579	1372
+True y= 1	4206	648	6572
+Accuracy = 0.525183
+
+Added more words:
+	  Pred. y=-1	y=0	y=1
+True y=-1	6606	654	4106
+True y= 0	1463	580	1373
+True y= 1	4209	643	6574
+Accuracy = 0.525031
+
+Original list minus "he":
+	  Pred. y=-1	y=0	y=1
+True y=-1	6618	663	4085
+True y= 0	1462	587	1367
+True y= 1	4205	652	6569
+Accuracy = 0.525565
+

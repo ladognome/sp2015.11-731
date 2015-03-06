@@ -23,4 +23,4 @@ preprocessing (remove punctuation, lowercase) +
 Meteor metric +
 wordnet -
 stemming +
-
+changing stop words +
