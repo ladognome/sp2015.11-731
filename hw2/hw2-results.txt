@@ -195,4 +195,8 @@ True y= 1	4205	652	6569
 Accuracy = 0.525565
 
 With a=0.75, d=0.85:
-
+	  Pred. y=-1	y=0	y=1
+True y=-1	6604	671	4091
+True y= 0	1460	588	1368
+True y= 1	4213	651	6562
+Accuracy = 0.524802
