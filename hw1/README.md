@@ -20,3 +20,6 @@ Steps:
 -IBM Model 1 successfully implemented & messed with parameters
 -Took Vivian's IBM Model 1 to make code faster
 -Inserted Stanford POS tagger
+-Experimented with IBM Model 2
+-Tried implementing POS work by Jyoti Srivastava and Sudip Sanyal
+-Inserted German stemmer
