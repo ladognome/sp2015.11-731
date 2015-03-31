@@ -18,6 +18,9 @@ The `data/` directory contains the input set to be decoded and the models
 
 
 Order of experiments:
-Default
-Adjective and noun switching
-Added in future cost (https://www.cs.jhu.edu/~jason/465/PowerPoint/lect32b-mt-decoding.pdf)
+ - Default
+ - Adjective and noun switching
+ - Added in future cost (https://www.cs.jhu.edu/~jason/465/PowerPoint/lect32b-mt-decoding.pdf)
+ - Took Hao's future cost
+ - Fixed adj/noun switching to adjacent words, added in Spanish-special knowledge
+
