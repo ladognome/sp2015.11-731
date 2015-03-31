@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# coding=utf-8
 import argparse
 import sys
 import models
@@ -35,26 +36,58 @@ def score_lm(translation,isEnd):
     lm_score += lm.end(lm_state) if isEnd is True else 0.0
     return lm_score,lm_state
 
+def isNoun(word, t):
+    if t:
+       if "n" in t[0]:
+          return True
+    elif word.endswith('ción') or word.endswith('sión'):
+       return True
+    else:
+       return False
+
+def isAdj(word, t):
+    if t:
+        if "a" in t[0]:
+            return True
+    elif word.endswith("ado") or word.endswith("ada") or word.endswith("ido") or word.endswith("ida"):
+        return True
+    else:
+        return False
+
 def reorder(f):
     old_spanish_uni = uni.tag(f)
     spanish_uni = []
-    saved_noun = None
-    saved_index = -2
-    for index, (word,tag) in enumerate(old_spanish_uni):
-        if not tag:
-            spanish_uni.append(word)
-	elif "n" in tag[0]:
-            if saved_noun:
-		spanish_uni.append(saved_noun)
-            saved_noun = word
-            saved_index = index
-        elif "a" in tag[0]:
-            spanish_uni.append(word)
-        else:
-            if saved_noun:
-                spanish_uni.append(saved_noun)
-                saved_noun = None
-            spanish_uni.append(word)
+    index = 0
+    added = False
+    while index < len(old_spanish_uni):
+        (word, tag) = old_spanish_uni[index]
+        if isNoun(word, tag):
+            if index < len(old_spanish_uni)-2:
+               nextword = old_spanish_uni[index+1]
+               if isAdj(nextword[0], nextword[1]):
+                   spanish_uni.append(nextword[0])
+                   spanish_uni.append(word)
+                   index+=1
+                   added = True
+            if not added:
+               spanish_uni.append(word)
+        elif index > 0:
+            oldword = old_spanish_uni[index-1]
+            if oldword[1]:
+               if "d" in oldword[1][0]: #determiner
+                    if index < len(old_spanish_uni)-2:
+                       nextword = old_spanish_uni[index+1]
+                       if isAdj(nextword[0], nextword[1]):
+                           spanish_uni.append(nextword[0])
+                           spanish_uni.append(word)
+                           index+=1
+                           added = True
+            if not added:
+                spanish_uni.append(word)
+        else:              
+           spanish_uni.append(word)
+        added = False
+        index+=1
     return tuple(spanish_uni)
  
 for f in input_sents:
@@ -97,4 +130,3 @@ for f in input_sents:
     def extract_english_recursive(h):
         return ' '.join(h.translation)
     print extract_english_recursive(winner)
-
