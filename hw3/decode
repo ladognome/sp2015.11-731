@@ -21,15 +21,21 @@ lm = models.LM(opts.lm)
 sys.stderr.write('Decoding %s...\n' % (opts.input,))
 input_sents = [tuple(line.strip().split()) for line in open(opts.input).readlines()[:opts.num_sents]]
 
-hypothesis = namedtuple('hypothesis', 'logprob, future, lm_state, predecessor, phrase')
+hypothesis = namedtuple('hypothesis', 'logprob, tm_score, lm_score, lm_state, translation')
 
 cess_tags = cess.tagged_sents()
 uni = ut(cess_tags)
 
-def extract_tm_logprob(h):
-   return 0.0 if h.predecessor is None else h.phrase.logprob + extract_tm_logprob(h.predecessor)
+def score_lm(translation,isEnd):
+    lm_score = 0.0
+    lm_state = lm.begin()
+    for word in ' '.join(translation).split():
+        (lm_state, word_logprob) = lm.score(lm_state, word)
+        lm_score += word_logprob
+    lm_score += lm.end(lm_state) if isEnd is True else 0.0
+    return lm_score,lm_state
 
-for f in input_sents:
+def reorder(f):
     old_spanish_uni = uni.tag(f)
     spanish_uni = []
     saved_noun = None
@@ -40,10 +46,8 @@ for f in input_sents:
 	elif "n" in tag[0]:
             if saved_noun:
 		spanish_uni.append(saved_noun)
-                saved_noun = word
-            else:
-                saved_noun = word
-                saved_index = index
+            saved_noun = word
+            saved_index = index
         elif "a" in tag[0]:
             spanish_uni.append(word)
         else:
@@ -51,11 +55,10 @@ for f in input_sents:
                 spanish_uni.append(saved_noun)
                 saved_noun = None
             spanish_uni.append(word)
-    f = tuple(spanish_uni)
-
-
-
-
+    return tuple(spanish_uni)
+ 
+for f in input_sents:
+    f = reorder(f)
     # The following code implements a DP monotone decoding
     # algorithm (one that doesn't permute the target phrases).
     # Hence all hypotheses in stacks[i] represent translations of 
@@ -63,7 +66,7 @@ for f in input_sents:
     # HINT: Generalize this so that stacks[i] contains translations
     # of any i words (remember to keep track of which words those
     # are, and to estimate future costs)
-    initial_hypothesis = hypothesis(0.0, 0.0, lm.begin(), None, None)
+    initial_hypothesis = hypothesis(0.0, 0.0, 0.0, lm.begin(), [])
 
     stacks = [{} for _ in f] + [{}]
     stacks[0][lm.begin()] = initial_hypothesis
@@ -75,26 +78,23 @@ for f in input_sents:
 		#for each existing phrase, figure out the prob of the hypothesis, the Spanish phrase, the individual English words, & it ending there
                 if f[i:j] in tm:
                     for phrase in tm[f[i:j]]:
-                        logprob = h.logprob + phrase.logprob
-                        lm_state = h.lm_state
-                        future_cost = 0
-                        for word in phrase.english.split():
-                            (lm_state, word_logprob) = lm.score(lm_state, word)
-                            logprob += word_logprob
-                            future_cost += extract_tm_logprob(h)
-                        logprob += lm.end(lm_state) if j == len(f) else 0.0
-                        new_hypothesis = hypothesis(logprob, future_cost, lm_state, h, phrase)
-                        if lm_state not in stacks[j] or stacks[j][lm_state].logprob+stacks[j][lm_state].future < logprob+future_cost: # second case is recombination
-                            stacks[j][lm_state] = new_hypothesis 
-                
+                        tm_score = h.tm_score + phrase.logprob
+                        for k in xrange( max(0, len(h.translation)-2), len(h.translation) +1):
+                            new_translation = h.translation[:k] + [phrase.english] + h.translation[k:]
+                            lm_score = 0.0
+                            lm_state = None
+                            if j!=len(f):
+                                lm_score,lm_state = score_lm(new_translation, False)
+                            else:
+                                lm_score,lm_state = score_lm(new_translation, True)
+                            new_hypothesis = hypothesis(tm_score + lm_score, tm_score, lm_score, lm_state, new_translation)
+                            if new_hypothesis.lm_state not in stacks[j] or stacks[j][new_hypothesis.lm_state].logprob < new_hypothesis.logprob: # second case is recombination
+                                stacks[j][new_hypothesis.lm_state] = new_hypothesis 
 
     # find best translation by looking at the best scoring hypothesis
     # on the last stack
-    winner = max(stacks[-1].itervalues(), key=lambda h: (h.logprob+h.future))
+    winner = max(stacks[-1].itervalues(), key=lambda h: h.logprob)
     def extract_english_recursive(h):
-        return '' if h.predecessor is None else '%s%s ' % (extract_english_recursive(h.predecessor), h.phrase.english)
+        return ' '.join(h.translation)
     print extract_english_recursive(winner)
 
-    if opts.verbose:
-        tm_logprob = extract_tm_logprob(winner)
-        sys.stderr.write('LM = %f, TM = %f, Total = %f\n' %  (winner.logprob - tm_logprob, tm_logprob, winner.logprob))
