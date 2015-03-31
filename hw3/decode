@@ -40,7 +40,7 @@ def isNoun(word, t):
     if t:
        if "n" in t[0]:
           return True
-    elif word.endswith('ción') or word.endswith('sión'):
+    elif word.endswith('ción') or word.endswith('sión') or word.endswith('dad') or word.endswith('es') or word.endswith('tad') or word.endswith('tado'):
        return True
     else:
        return False
