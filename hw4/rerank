@@ -1,24 +1,112 @@
 #!/usr/bin/env python
-import sys
-import argparse
+import sys, argparse, random, operator, unicodedata
 from collections import defaultdict
 from utils import read_ttable
 
-def dot(w, v):
-	s = 0.0
-	for k in set(w.keys()) & set(v.keys()):
-		s += w[k] * v[k]
-	return s
-
 parser = argparse.ArgumentParser()
-parser.add_argument('--input', '-i', default='data/dev+test.input')
+parser.add_argument('--test', '-e', default='data/dev+test.input')
+parser.add_argument('--input', '-i', default='data/train.input')
 parser.add_argument('--ttable', '-t', default='data/ttable')
+parser.add_argument('--refs', '-r', default='data/train.refs')
+parser.add_argument('--iterations', '-it', default=5, type=int)
+parser.add_argument('--gamma', '-g', default=0.01, type=float)
+parser.add_argument('--alpha', '-a', default=0.01, type=float)
+parser.add_argument('--cutoff', '-c', default=4, type=int)
 args = parser.parse_args()
 
-translation_table = read_ttable(args.ttable)
-weights = {'log_prob_tgs': 1.0}
+def dot(w, v):
+	return sum(w[k]*v[k] for k in w if k in v)
+	#s = 0.0
+	#for k in set(w.keys()) & set(v.keys()):
+	#	s += w[k] * v[k]
+	#return s
+def sub(w, v):
+	new_dictionary = defaultdict(float)
+	keys = set(list(w.keys())+list(v.keys()))
+	for k in keys:
+		if (k in w) and (k in v):
+			new_dictionary[k] = w[k] - v[k]
+		elif k in w:
+			new_dictionary[k] = w[k]
+		elif k in v:
+			new_dictionary[k] = -v[k]
+	return new_dictionary
+def add(w, v):
+	new_dictionary = defaultdict(float)
+	keys = set(list(w.keys())+list(v.keys()))
+	for k in keys:
+		if (k in w) and (k in v):
+			new_dictionary[k] = w[k] + v[k]
+		elif k in w:
+			new_dictionary[k] = w[k]
+		elif k in v:
+			new_dictionary[k] = v[k]
+	return new_dictionary
+def strip_accents(s):
+   return ''.join(c for c in unicodedata.normalize('NFD', s)
+                  if unicodedata.category(c) != 'Mn')
 
-for line in open(args.input):
+translation_table = read_ttable(args.ttable)
+correct_translations = [x.strip() for x in open(args.refs).readlines()]
+w = {'log_prob_tgs':0, 'log_prob_sgt':0, 'log_lex_prob_tgs':0, 'log_lex_prob_sgt':0}
+
+new_translation_table = translation_table.copy()
+print >> sys.stderr, 'Setting up new features...'
+for index, line in enumerate(open(args.input)):
 	left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
-	candidates = [target for target, features in sorted(translation_table[phrase].iteritems(), key=lambda (t, f): dot(f, weights), reverse=True)]
+	left_list = left_context.split()
+	right_list = right_context.split()
+	for target in translation_table[phrase].keys():
+		#target_string=strip_accents(target)
+		target_list = [strip_accents(word[0:args.cutoff]) for word in target.split()]
+		target_string = " ".join(target_list)
+		#target_string = strip_accents(target[0:cutoff])
+		if left_list:
+			left = left_list[-1]
+			string = phrase+":"+target_string+":"+left
+			w[string] = 0
+			new_translation_table[phrase][target][string] = 1
+		if right_list:
+			right = right_list[0]
+			string = phrase+":"+target_string+":"+right
+			w[string] = 0
+			new_translation_table[phrase][target][string] = 1
+	sys.stderr.write('%d\r' % index)
+
+translation_table = new_translation_table
+del(new_translation_table)
+
+#creating derivative table
+print >> sys.stderr, 'Calculating derivative table...'
+derivatives = defaultdict(lambda: defaultdict(float))
+for index, line in enumerate(open(args.input)):
+	left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+	answer_features = translation_table[phrase][correct_translations[index].decode('utf-8')]
+	total = answer_features.copy()
+	for key in total.keys():
+		total[key] = 0
+	for target, features in translation_table[phrase].iteritems():
+		if correct_translations[index].decode('utf-8') == target:
+			continue
+		if (args.gamma - dot(sub(answer_features, features),w) > 0):
+			total = add(total, sub(features, answer_features))
+	derivatives[phrase] = total
+	sys.stderr.write('%d\r' % index)
+
+#training
+print >> sys.stderr, 'Training...'
+for index in xrange(args.iterations):
+	for phrase, feats in derivatives.iteritems():
+		f = defaultdict(float)
+		for key, value in feats.iteritems():
+			f[key] = value*args.alpha
+		w = sub(w, f)
+	sys.stderr.write('%d\r' % index)
+
+#testing
+print >> sys.stderr, 'Printing...'
+for index, line in enumerate(open(args.test)):
+        left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+	candidates = [target for target, features in sorted(translation_table[phrase].iteritems(), key=lambda (t, f): dot(f, w), reverse=True)]
 	print ' ||| '.join(candidates).encode('utf-8')
+	sys.stderr.write('%d\r' % index)
