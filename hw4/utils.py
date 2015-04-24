@@ -18,6 +18,18 @@ def read_ttable(filename):
 	print >>sys.stderr
 	return translation_table
 
+def read_ttable_list(filename):
+	translation_table = defaultdict(lambda: defaultdict(list))
+	print >>sys.stderr, 'Reading ttable from %s...' % filename
+	with open(filename) as f:
+		for i, line in enumerate(f):
+			source, target, features = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+			features = [float(v) for v in features.split()]
+			translation_table[source][target] = features
+			sys.stderr.write('%d\r' % i)
+	print >>sys.stderr
+	return translation_table
+
 class DependencyTree:
 	def __init__(self, n):
 		self.terminals = [None for _ in range(n)]

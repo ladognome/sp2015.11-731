@@ -16,10 +16,6 @@ args = parser.parse_args()
 
 def dot(w, v):
 	return sum(w[k]*v[k] for k in w if k in v)
-	#s = 0.0
-	#for k in set(w.keys()) & set(v.keys()):
-	#	s += w[k] * v[k]
-	#return s
 def sub(w, v):
 	new_dictionary = defaultdict(float)
 	keys = set(list(w.keys())+list(v.keys()))
@@ -54,23 +50,19 @@ new_translation_table = translation_table.copy()
 print >> sys.stderr, 'Setting up new features...'
 for index, line in enumerate(open(args.input)):
 	left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
-	left_list = left_context.split()
-	right_list = right_context.split()
+	left = left_context.split()[-1] if left_context else ""
+	right = right_context.split()[0] if right_context else ""
 	for target in translation_table[phrase].keys():
-		#target_string=strip_accents(target)
 		target_list = [strip_accents(word[0:args.cutoff]) for word in target.split()]
 		target_string = " ".join(target_list)
-		#target_string = strip_accents(target[0:cutoff])
-		if left_list:
-			left = left_list[-1]
-			string = phrase+":"+target_string+":"+left
-			w[string] = 0
-			new_translation_table[phrase][target][string] = 1
-		if right_list:
-			right = right_list[0]
-			string = phrase+":"+target_string+":"+right
-			w[string] = 0
-			new_translation_table[phrase][target][string] = 1
+		
+		string = phrase+":"+target_string+":"+left
+		w[string] = 0
+		new_translation_table[phrase][target][string] = 1
+		
+		string = phrase+":"+target_string+":"+right
+		w[string] = 0
+		new_translation_table[phrase][target][string] = 1
 	sys.stderr.write('%d\r' % index)
 
 translation_table = new_translation_table

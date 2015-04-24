@@ -25,3 +25,17 @@ The `data/` directory contains the input set to be decoded and the models
  - `data/ttable` is the phrase translation table which contains candidates that you will rerank
 
  If you want the raw parallel data used to build the training data and translation tables English-Czech data (for example, to build word vectors), it is available at http://demo.clab.cs.cmu.edu/sp2015-11731/parallel.encs .
+
+
+
+
+
+
+List of experiments:
+
+ - tried python lists
+ - tried dictionaries
+ - used first 4 characters of target language
+ - used first 4 characters of each word of target language
+ - removed accents from target language
+ - experimented with different size training files for features (see "training-size.txt")
