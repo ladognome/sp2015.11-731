@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 import sys, argparse, random, operator, unicodedata
 from collections import defaultdict
-from utils import read_ttable
+from utils import *
+from sumy.nlp.stemmers import Stemmer
+
+stemmer = Stemmer('czech')
+trees = read_dep_trees('data/train.parses')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--test', '-e', default='data/dev+test.input')
@@ -38,6 +42,11 @@ def add(w, v):
 		elif k in v:
 			new_dictionary[k] = v[k]
 	return new_dictionary
+def total(w):
+	t = 0
+	for val in w.values():
+		t+=val
+	return t
 def strip_accents(s):
    return ''.join(c for c in unicodedata.normalize('NFD', s)
                   if unicodedata.category(c) != 'Mn')
@@ -50,50 +59,47 @@ new_translation_table = translation_table.copy()
 print >> sys.stderr, 'Setting up new features...'
 for index, line in enumerate(open(args.input)):
 	left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
-	left = left_context.split()[-1] if left_context else ""
-	right = right_context.split()[0] if right_context else ""
+	rightsplit = right_context.split()
+	leftsplit = left_context.split()
+	whole_sentence = rightsplit+[phrase]+leftsplit
+	dep = trees.next()
+	root = dep.roots[0][0]
+	
+	left = leftsplit[-1] if left_context else ""
+	right = rightsplit[0] if right_context else ""
 	for target in translation_table[phrase].keys():
-		target_list = [strip_accents(word[0:args.cutoff]) for word in target.split()]
-		target_string = " ".join(target_list)
-		
-		string = phrase+":"+target_string+":"+left
-		w[string] = 0
+		string = phrase+":"+target+":"+left
 		new_translation_table[phrase][target][string] = 1
 		
-		string = phrase+":"+target_string+":"+right
-		w[string] = 0
+		string = phrase+":"+target+":"+right
 		new_translation_table[phrase][target][string] = 1
+
+		new_translation_table[phrase][target][whole_sentence[root]] = 1
 	sys.stderr.write('%d\r' % index)
 
 translation_table = new_translation_table
 del(new_translation_table)
 
-#creating derivative table
-print >> sys.stderr, 'Calculating derivative table...'
-derivatives = defaultdict(lambda: defaultdict(float))
-for index, line in enumerate(open(args.input)):
-	left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
-	answer_features = translation_table[phrase][correct_translations[index].decode('utf-8')]
-	total = answer_features.copy()
-	for key in total.keys():
-		total[key] = 0
-	for target, features in translation_table[phrase].iteritems():
-		if correct_translations[index].decode('utf-8') == target:
-			continue
-		if (args.gamma - dot(sub(answer_features, features),w) > 0):
-			total = add(total, sub(features, answer_features))
-	derivatives[phrase] = total
-	sys.stderr.write('%d\r' % index)
-
 #training
 print >> sys.stderr, 'Training...'
+#old_w = {'log_prob_tgs':1000, 'log_prob_sgt':1000, 'log_lex_prob_tgs':1000, 'log_lex_prob_sgt':1000}
 for index in xrange(args.iterations):
-	for phrase, feats in derivatives.iteritems():
-		f = defaultdict(float)
-		for key, value in feats.iteritems():
-			f[key] = value*args.alpha
-		w = sub(w, f)
+#while (abs(total(sub(old_w, w))) > 0.01):
+#	old_w = w.copy()
+	for index, line in enumerate(open(args.input)):
+		left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+		answer_features = translation_table[phrase][correct_translations[index].decode('utf-8')]
+		for target, features in translation_table[phrase].iteritems():
+			if correct_translations[index].decode('utf-8') == target:
+				continue
+			if (args.gamma - dot(sub(answer_features, features),w) > 0):
+				g = sub(features, answer_features)
+				f = defaultdict(float)
+				for key, value in g.iteritems():
+					f[key] = value*args.alpha
+				w = sub(w, f)
 	sys.stderr.write('%d\r' % index)
+#	print >> sys.stderr, total(sub(old_w,w))
 
 #testing
 print >> sys.stderr, 'Printing...'
