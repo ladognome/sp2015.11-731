@@ -61,20 +61,41 @@ for index, line in enumerate(open(args.input)):
 	left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
 	rightsplit = right_context.split()
 	leftsplit = left_context.split()
-	whole_sentence = rightsplit+[phrase]+leftsplit
+	whole_sentence = leftsplit+[phrase]+rightsplit
+	phraseInd = whole_sentence.index(phrase)
 	dep = trees.next()
 	root = dep.roots[0][0]
+	POS = dep.tags[phraseInd]
 	
 	left = leftsplit[-1] if left_context else ""
+	left2_bool = False
+	right2_bool = False
+	if len(leftsplit) > 1:
+		left2 = leftsplit[-2] if left_context else ""
+		left2_bool = True
 	right = rightsplit[0] if right_context else ""
+	if len(rightsplit) > 1:
+		right2 = rightsplit[1] if right_context else ""
+		right2_bool = True
 	for target in translation_table[phrase].keys():
+		#next and prev 1
 		string = phrase+":"+target+":"+left
 		new_translation_table[phrase][target][string] = 1
-		
 		string = phrase+":"+target+":"+right
 		new_translation_table[phrase][target][string] = 1
 
+		#root
 		new_translation_table[phrase][target][whole_sentence[root]] = 1
+		#POS of phrase
+		new_translation_table[phrase][target][POS] = 1
+		
+		#next and prev 2
+		if left2_bool:
+			string = phrase+":"+target+":"+left2+left
+			new_translation_table[phrase][target][string] = 1
+		if right2_bool:
+			string = phrase+":"+target+":"+right+right2
+			new_translation_table[phrase][target][string] = 1
 	sys.stderr.write('%d\r' % index)
 
 translation_table = new_translation_table
@@ -82,10 +103,7 @@ del(new_translation_table)
 
 #training
 print >> sys.stderr, 'Training...'
-#old_w = {'log_prob_tgs':1000, 'log_prob_sgt':1000, 'log_lex_prob_tgs':1000, 'log_lex_prob_sgt':1000}
 for index in xrange(args.iterations):
-#while (abs(total(sub(old_w, w))) > 0.01):
-#	old_w = w.copy()
 	for index, line in enumerate(open(args.input)):
 		left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
 		answer_features = translation_table[phrase][correct_translations[index].decode('utf-8')]
