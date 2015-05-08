@@ -15,7 +15,6 @@ parser.add_argument('--refs', '-r', default='data/train.refs')
 parser.add_argument('--iterations', '-it', default=5, type=int)
 parser.add_argument('--gamma', '-g', default=0.01, type=float)
 parser.add_argument('--alpha', '-a', default=0.01, type=float)
-parser.add_argument('--cutoff', '-c', default=4, type=int)
 args = parser.parse_args()
 
 def dot(w, v):
@@ -67,22 +66,36 @@ for index, line in enumerate(open(args.input)):
 	root = dep.roots[0][0]
 	POS = dep.tags[phraseInd]
 	
-	left = leftsplit[-1] if left_context else ""
+	left = ""
+	left_POS = ""
+	right = ""
+	right_POS = ""
+	if left_context:
+		left = leftsplit[-1]
+		left_POS = dep.tags[phraseInd-1]
+	if right_context:
+		right = rightsplit[0]
+		right_POS = dep.tags[phraseInd+1]
 	left2_bool = False
 	right2_bool = False
 	if len(leftsplit) > 1:
-		left2 = leftsplit[-2] if left_context else ""
+		left2 = leftsplit[-2]
 		left2_bool = True
-	right = rightsplit[0] if right_context else ""
 	if len(rightsplit) > 1:
-		right2 = rightsplit[1] if right_context else ""
+		right2 = rightsplit[1]
 		right2_bool = True
 	for target in translation_table[phrase].keys():
 		#next and prev 1
-		string = phrase+":"+target+":"+left
-		new_translation_table[phrase][target][string] = 1
-		string = phrase+":"+target+":"+right
-		new_translation_table[phrase][target][string] = 1
+		if left != "":
+			string = phrase+":"+target+":"+left
+			new_translation_table[phrase][target][string] = 1
+			string = phrase+":"+target+":"+left_POS
+			new_translation_table[phrase][target][string] = 1
+		if right != "":
+			string = phrase+":"+target+":"+right
+			new_translation_table[phrase][target][string] = 1
+			string = phrase+":"+target+":"+right_POS
+			new_translation_table[phrase][target][string] = 1
 
 		#root
 		new_translation_table[phrase][target][whole_sentence[root]] = 1
