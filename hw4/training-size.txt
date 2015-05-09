@@ -47,7 +47,7 @@ unaltered, with root, with POS
 100 - 0.346057
 
 unaltered, with POS
-100 - 0.385142 -----------
+100 - 0.385142
 1000 - 0.370169
 
 unaltered with a ton of other stuff
@@ -64,7 +64,7 @@ sentence endings
 100 - 0.370480
 1000 - 0.369175
 dev - 0.555035
-1000, 0.0001 alpha, 0.15 gamma - 0.388073
+1000, 0.0001 alpha, 0.15 gamma - 0.388073 ----
 --------------------
 gamma=0.0001, alpha=0.0001
 
@@ -112,3 +112,5 @@ On Dev
 Andrew's stuff - 0.456255
 Mine - 0.552866
 
+Changed parameters
+0.554152

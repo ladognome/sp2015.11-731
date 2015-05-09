@@ -418,8 +418,10 @@ zeros_NextPOS_POS = np.zeros(len_NextPOS_POS)
 
 w = np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(w_first_part, zeros_phr), zeros_prev), zeros_Next), zeros_other), zeros_prev_POS), zeros_Next_POS), zeros_parentrel), zeros_parentPOS), zeros_prev2), zeros_Next2), zeros_prevPOS_POS), zeros_NextPOS_POS)
 
-alpha = .0001
-gamma = .15
+#alpha = .0001
+#gamma = .15
+alpha = 0.01
+gamma = 0.1
 iterations = 5
 
 w_table = np.zeros([iterations, 1])
