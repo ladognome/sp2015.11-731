@@ -39,3 +39,6 @@ List of experiments:
  - used first 4 characters of each word of target language
  - removed accents from target language
  - experimented with different size training files for features (see "training-size.txt")
+ - updated code, make more accurate
+ - experimented with other code
+ - added features with POS and dependency
