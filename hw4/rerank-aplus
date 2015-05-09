@@ -1,0 +1,725 @@
+#!/usr/bin/env python
+from __future__ import division
+import sys
+import argparse
+from collections import defaultdict
+from utils import read_ttable
+import scipy
+from scipy.sparse import csr_matrix
+from scipy.sparse import csc_matrix
+import numpy as np
+import random
+import unicodedata
+
+def remove_accents(input_str):
+    nkfd_form = unicodedata.normalize('NFKD', input_str)
+    return u"".join([c for c in nkfd_form if not unicodedata.combining(c)])
+
+def dot(w, v):
+	s = 0.0
+	for k in set(w.keys()) & set(v.keys()):
+		s += w[k] * v[k]
+	return s
+
+def removekey(d, key):
+    r = dict(d)
+    del r[key]
+    return r
+
+def Loss(x, y, w, gamma):
+	return max(0, (gamma - (np.dot((y - x), w))))
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--input', '-i', default='data/dev.input')
+parser.add_argument('--ttable', '-t', default='data/ttable')
+parser.add_argument('--refs', '-r', default='data/dev.refs')
+parser.add_argument('--parses', '-p', default='data/dev+test.parses')
+args = parser.parse_args()
+
+fo = open(args.refs)
+refs = fo.readlines()
+fo2 = open(args.input)
+read_input = fo2.readlines()
+
+SL = 50
+
+#--------------------------------------------------------------------------
+
+class DependencyTree:
+	def __init__(self, n):
+		self.terminals = [None for _ in range(n)]
+		self.tags = [None for _ in range(n)]
+		self.children = [[] for _ in range(n)]
+		self.parents = [None for _ in range(n)]
+		self.roots = []
+
+def parse(input_string):
+	input_lines = input_string.strip().split('\n')
+	n = len(input_lines)
+	tree = DependencyTree(n)
+	for i, line in enumerate(input_lines):
+		fields = [field.strip() for field in line.strip().split('\t')]
+		j, terminal, _, tag, __, ___, parent, relation = fields
+		j = int(j)
+		parent = int(parent)
+		assert i + 1 == j
+		assert 1 <= j <= n
+		assert 0 <= parent <= n
+		tree.terminals[i] = terminal
+		tree.tags[i] = tag
+		if parent != 0:
+			tree.parents[i] = (parent - 1, relation)
+			tree.children[parent - 1].append((i, relation))
+		else:
+			tree.parents[i] = (None, relation)
+			tree.roots.append((i, relation))
+
+	return tree
+
+def read_dep_trees_roots(filename):
+	roots = []
+	current_tree = []
+	with open(filename) as f:
+		for line in f:
+			line = line.decode('utf-8')
+			if len(line.strip()) != 0:
+				current_tree.append(line.strip())
+			else:
+				x = parse('\n'.join(current_tree)).roots
+				roots.append(x)
+				current_tree = []
+	return roots
+
+def read_dep_trees_POS(filename):
+	tags = []
+	current_tree = []
+	with open(filename) as f:
+		for line in f:
+			line = line.decode('utf-8')
+			if len(line.strip()) != 0:
+				current_tree.append(line.strip())
+			else:
+				x = parse('\n'.join(current_tree)).tags
+				tags.append(x)
+				current_tree = []
+	return tags
+
+def read_dep_trees_parents(filename):
+	parents = []
+	current_tree = []
+	with open(filename) as f:
+		for line in f:
+			line = line.decode('utf-8')
+			if len(line.strip()) != 0:
+				current_tree.append(line.strip())
+			else:
+				x = parse('\n'.join(current_tree)).parents
+				parents.append(x)
+				current_tree = []
+	return parents
+
+roots_list = read_dep_trees_roots(args.parses)
+POS_list = read_dep_trees_POS(args.parses)
+parents_list = read_dep_trees_parents(args.parses)
+
+#--------------------------------------------------------------------------
+
+phrase_ft_strings = []
+prev_ft_strings = []
+Next_ft_strings = []
+root_ft_strings_1 = []
+prev_POS_ft_strings = []
+Next_POS_ft_strings = []
+parentrel_ft_strings = []
+parentPOS_ft_strings = []
+prev2_ft_strings = []
+Next2_ft_strings = []
+prevPOS_POS_ft_strings = []
+NextPOS_POS_ft_strings = []
+
+incomplete_phrase_ft_strings = []
+incomplete_prev_ft_strings = []
+incomplete_Next_ft_strings = []
+incomplete_root_ft_strings_1 = []
+incomplete_prev_POS_ft_strings = []
+incomplete_Next_POS_ft_strings = []
+incomplete_parentrel_ft_strings = []
+incomplete_parentPOS_ft_strings = []
+incomplete_prev2_ft_strings = []
+incomplete_Next2_ft_strings = []
+incomplete_prevPOS_POS_ft_strings = []
+incomplete_NextPOS_POS_ft_strings = []
+
+input_line_index = -1
+for line in read_input:
+	input_line_index += 1
+	left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+
+	sentence = left_context + " " + phrase + " " + right_context
+	sentence = sentence.split()
+
+	left_context = left_context.strip().split()
+	right_context = right_context.strip().split()
+
+	phrase_index = len(left_context)
+
+	phrase = phrase[:SL]
+
+	if len(left_context) > 1:
+		prev = left_context[-1]
+		prev2 = left_context[-2]
+		prev = prev[:SL]
+		prev2 = prev2[:SL]
+	elif len(left_context) == 1:
+		prev = left_context[-1]
+		prev = prev[:SL]
+		prev2 = "<s>"
+	else:
+		prev = "<s>"
+		prev2 = "<s>"
+
+	if len(right_context) > 1:
+		Next = right_context[0]
+		Next = Next[:SL]
+		Next2 = right_context[1]
+		Next2 = Next2[:SL]
+	elif len(right_context) == 1:
+		Next = right_context[0]
+		Next = Next[:SL]
+		Next2 = "</s>"
+	else:
+		Next = "</s>"
+		Next2 = "</s>"
+
+	correct_czech = refs[input_line_index].decode("UTF-8").strip()
+
+	correct_czech = remove_accents(correct_czech[:SL])
+
+	if roots_list[input_line_index][0][0] == phrase_index:
+		root_ft_str = "root:" + phrase + correct_czech[-2:]
+		root_ft_strings_1.append(root_ft_str)
+
+
+	POS = POS_list[input_line_index][phrase_index]
+
+	if len(left_context) > 1:
+		prev2POS = POS_list[input_line_index][phrase_index-2]
+		prevPOS = POS_list[input_line_index][phrase_index-1]
+	elif len(left_context) == 1:
+		prev2POS = "<s>"
+		prevPOS = POS_list[input_line_index][phrase_index-1]
+	else:
+		prev2POS = "<s>"
+		prevPOS = "<s>"
+
+	if len(right_context) > 1:
+		NextPOS = POS_list[input_line_index][phrase_index+1]
+		Next2POS = POS_list[input_line_index][phrase_index+2]
+	elif len(right_context) == 1:
+		NextPOS = POS_list[input_line_index][phrase_index+1]
+		Next2POS = "</s>"
+	else:
+		NextPOS = "</s>"
+		Next2POS = "</s>"
+
+
+	parrel = parents_list[input_line_index][phrase_index][1]
+	if parents_list[input_line_index][phrase_index][0] != None:
+		parPOS = POS_list[input_line_index][parents_list[input_line_index][phrase_index][0]]
+	else:
+		parPOS = "None"
+
+	phrase_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+	prev_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_prev:" + prev
+	Next_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_next:" + Next
+	prev_POS_ft_str = "src:" + POS + "_tgt:" + correct_czech + "_prev:" + prev
+	Next_POS_ft_str = "src:" + POS + "_tgt:" + correct_czech + "_next:" + Next
+	parentrel_ft_str = "parentrel:" + parrel + "_tgt:" + correct_czech[-2:]
+	parentPOS_ft_str = "parentPOS:" + parPOS + "_tgt:" + correct_czech[-2:]
+	prev2_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_prev2:" + prev2 + prev
+	Next2_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_next2:" + Next + Next2
+	prevPOS_POS_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_prev:" + prev2POS + prevPOS
+	NextPOS_POS_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_next:" + NextPOS + Next2POS
+
+	incomplete_phrase_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+	incomplete_prev_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+	incomplete_Next_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+	incomplete_root_ft_str = "root:" + phrase + correct_czech[-2:]
+	incomplete_prev_POS_ft_str = "src:" + POS + "_tgt:" + correct_czech
+	incomplete_Next_POS_ft_str = "src:" + POS + "_tgt:" + correct_czech
+	incomplete_parentrel_ft_str = "parentrel:" + parrel + "_tgt:" + correct_czech[-2:]
+	incomplete_parentPOS_ft_str = "parentPOS:" + parPOS + "_tgt:" + correct_czech[-2:]
+	incomplete_prev2_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+	incomplete_Next2_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+	incomplete_prevPOS_POS_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+	incomplete_NextPOS_POS_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+
+	phrase_ft_strings.append(phrase_ft_str)
+	prev_ft_strings.append(prev_ft_str)
+	Next_ft_strings.append(Next_ft_str)
+	prev_POS_ft_strings.append(prev_POS_ft_str)
+	Next_POS_ft_strings.append(Next_POS_ft_str)
+	parentrel_ft_strings.append(parentrel_ft_str)
+	parentPOS_ft_strings.append(parentPOS_ft_str)
+	prev2_ft_strings.append(prev2_ft_str)
+	Next2_ft_strings.append(Next2_ft_str)
+	prevPOS_POS_ft_strings.append(prevPOS_POS_ft_str)
+	NextPOS_POS_ft_strings.append(NextPOS_POS_ft_str)
+
+	incomplete_phrase_ft_strings.append(incomplete_phrase_ft_str)
+	incomplete_prev_ft_strings.append(incomplete_prev_ft_str)
+	incomplete_Next_ft_strings.append(incomplete_Next_ft_str)
+	incomplete_root_ft_strings_1.append(incomplete_root_ft_str)
+	incomplete_prev_POS_ft_strings.append(incomplete_prev_POS_ft_str)
+	incomplete_Next_POS_ft_strings.append(incomplete_Next_POS_ft_str)
+	incomplete_parentrel_ft_strings.append(incomplete_parentrel_ft_str)
+	incomplete_parentPOS_ft_strings.append(incomplete_parentPOS_ft_str)
+	incomplete_prev2_ft_strings.append(incomplete_prev2_ft_str)
+	incomplete_Next2_ft_strings.append(incomplete_Next2_ft_str)
+	incomplete_prevPOS_POS_ft_strings.append(incomplete_prevPOS_POS_ft_str)
+	incomplete_NextPOS_POS_ft_strings.append(incomplete_NextPOS_POS_ft_str)
+
+phrase_ft_strings = sorted(set(phrase_ft_strings))
+prev_ft_strings = sorted(set(prev_ft_strings))
+Next_ft_strings = sorted(set(Next_ft_strings))
+root_ft_strings_1 = sorted(set(root_ft_strings_1))
+prev_POS_ft_strings = sorted(set(prev_POS_ft_strings))
+Next_POS_ft_strings = sorted(set(Next_POS_ft_strings))
+parentrel_ft_strings = sorted(set(parentrel_ft_strings))
+parentPOS_ft_strings = sorted(set(parentPOS_ft_strings))
+prev2_ft_strings = sorted(set(prev2_ft_strings))
+Next2_ft_strings = sorted(set(Next2_ft_strings))
+prevPOS_POS_ft_strings = sorted(set(prevPOS_POS_ft_strings))
+NextPOS_POS_ft_strings = sorted(set(NextPOS_POS_ft_strings))
+
+incomplete_phrase_ft_strings = sorted(set(incomplete_phrase_ft_strings))
+incomplete_prev_ft_strings = sorted(set(incomplete_prev_ft_strings))
+incomplete_Next_ft_strings = sorted(set(incomplete_Next_ft_strings))
+incomplete_root_ft_strings_1 = sorted(set(incomplete_root_ft_strings_1))
+incomplete_prev_POS_ft_strings = sorted(set(incomplete_prev_POS_ft_strings))
+incomplete_Next_POS_ft_strings = sorted(set(incomplete_Next_POS_ft_strings))
+incomplete_parentrel_ft_strings = sorted(set(incomplete_parentrel_ft_strings))
+incomplete_parentPOS_ft_strings = sorted(set(incomplete_parentPOS_ft_strings))
+incomplete_prev2_ft_strings = sorted(set(incomplete_prev2_ft_strings))
+incomplete_Next2_ft_strings = sorted(set(incomplete_Next2_ft_strings))
+incomplete_prevPOS_POS_ft_strings = sorted(set(incomplete_prevPOS_POS_ft_strings))
+incomplete_NextPOS_POS_ft_strings = sorted(set(incomplete_NextPOS_POS_ft_strings))
+
+phrase_ft_strings_dict = {}
+prev_ft_strings_dict = {}
+Next_ft_strings_dict = {}
+root_ft_strings_1_dict = {}
+prev_POS_ft_strings_dict = {}
+Next_POS_ft_strings_dict = {}
+parentrel_ft_strings_dict = {}
+parentPOS_ft_strings_dict = {}
+prev2_ft_strings_dict = {}
+Next2_ft_strings_dict = {}
+prevPOS_POS_ft_strings_dict = {}
+NextPOS_POS_ft_strings_dict = {}
+
+incomplete_phrase_ft_strings_dict = {}
+incomplete_prev_ft_strings_dict = {}
+incomplete_Next_ft_strings_dict = {}
+incomplete_root_ft_strings_1_dict = {}
+incomplete_prev_POS_ft_strings_dict = {}
+incomplete_Next_POS_ft_strings_dict = {}
+incomplete_parentrel_ft_strings_dict = {}
+incomplete_parentPOS_ft_strings_dict = {}
+incomplete_prev2_ft_strings_dict = {}
+incomplete_Next2_ft_strings_dict = {}
+incomplete_prevPOS_POS_ft_strings_dict = {}
+incomplete_NextPOS_POS_ft_strings_dict = {}
+
+for i, item in enumerate(phrase_ft_strings):
+	phrase_ft_strings_dict[item] = i
+for i, item in enumerate(prev_ft_strings):
+	prev_ft_strings_dict[item] = i
+for i, item in enumerate(Next_ft_strings):
+	Next_ft_strings_dict[item] = i
+for i, item in enumerate(root_ft_strings_1):
+	root_ft_strings_1_dict[item] = i
+for i, item in enumerate(prev_POS_ft_strings):
+	prev_POS_ft_strings_dict[item] = i
+for i, item in enumerate(Next_POS_ft_strings):
+	Next_POS_ft_strings_dict[item] = i
+for i, item in enumerate(parentrel_ft_strings):
+	parentrel_ft_strings_dict[item] = i
+for i, item in enumerate(parentPOS_ft_strings):
+	parentPOS_ft_strings_dict[item] = i
+for i, item in enumerate(prev2_ft_strings):
+	prev2_ft_strings_dict[item] = i
+for i, item in enumerate(Next2_ft_strings):
+	Next2_ft_strings_dict[item] = i
+for i, item in enumerate(prevPOS_POS_ft_strings):
+	prevPOS_POS_ft_strings_dict[item] = i
+for i, item in enumerate(NextPOS_POS_ft_strings):
+	NextPOS_POS_ft_strings_dict[item] = i
+
+for i, item in enumerate(incomplete_phrase_ft_strings):
+	incomplete_phrase_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_prev_ft_strings):
+	incomplete_prev_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_Next_ft_strings):
+	incomplete_Next_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_root_ft_strings_1):
+	incomplete_root_ft_strings_1_dict[item] = i
+for i, item in enumerate(incomplete_prev_POS_ft_strings):
+	incomplete_prev_POS_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_Next_POS_ft_strings):
+	incomplete_Next_POS_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_parentrel_ft_strings):
+	incomplete_parentrel_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_parentPOS_ft_strings):
+	incomplete_parentPOS_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_prev2_ft_strings):
+	incomplete_prev2_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_Next2_ft_strings):
+	incomplete_Next2_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_prevPOS_POS_ft_strings):
+	incomplete_prevPOS_POS_ft_strings_dict[item] = i
+for i, item in enumerate(incomplete_NextPOS_POS_ft_strings):
+	incomplete_NextPOS_POS_ft_strings_dict[item] = i
+
+len_phr = len(phrase_ft_strings)
+len_prev = len(prev_ft_strings)
+len_Next = len(Next_ft_strings)
+len_root_ft_strings_1 = len(root_ft_strings_1)
+len_prev_POS = len(prev_POS_ft_strings)
+len_Next_POS = len(Next_POS_ft_strings)
+len_parentrel = len(parentrel_ft_strings)
+len_parentPOS = len(parentPOS_ft_strings)
+len_prev2 = len(prev2_ft_strings)
+len_Next2 = len(Next2_ft_strings)
+len_prevPOS_POS = len(prevPOS_POS_ft_strings)
+len_NextPOS_POS = len(NextPOS_POS_ft_strings)
+
+len_all = len_phr + len_prev + len_Next + len_root_ft_strings_1 + len_prev_POS + len_Next_POS + len_parentrel + len_parentPOS + len_prev2 + len_Next2 + len_prevPOS_POS + len_NextPOS_POS
+#---------------------------------------------------------------------------
+
+translation_table = read_ttable(args.ttable)
+
+weights = {'log_prob_tgs': 1}   #, "log_prob_sgt": 0, "log_lex_prob_tgs": 0, "log_lex_prob_sgt": 0}
+w1 = weights["log_prob_tgs"] #, weights["log_prob_sgt"], weights["log_lex_prob_tgs"], weights["log_lex_prob_sgt"]
+
+w_first_part = np.array([w1])
+zeros_phr = np.zeros(len_phr)
+zeros_prev = np.zeros(len_prev)
+zeros_Next = np.zeros(len_Next)
+zeros_other = np.zeros(len_root_ft_strings_1)
+zeros_prev_POS = np.zeros(len_prev_POS)
+zeros_Next_POS = np.zeros(len_Next_POS)
+zeros_parentrel = np.zeros(len_parentrel)
+zeros_parentPOS = np.zeros(len_parentPOS)
+zeros_prev2 = np.zeros(len_prev2)
+zeros_Next2 = np.zeros(len_Next2)
+zeros_prevPOS_POS = np.zeros(len_prevPOS_POS)
+zeros_NextPOS_POS = np.zeros(len_NextPOS_POS)
+
+w = np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(w_first_part, zeros_phr), zeros_prev), zeros_Next), zeros_other), zeros_prev_POS), zeros_Next_POS), zeros_parentrel), zeros_parentPOS), zeros_prev2), zeros_Next2), zeros_prevPOS_POS), zeros_NextPOS_POS)
+
+alpha = .0001
+gamma = .15
+iterations = 5
+
+w_table = np.zeros([iterations, 1])
+total_loss_table = np.zeros([iterations, 1])
+
+
+iter_num = -1
+for iters in range(iterations):
+	iter_num += 1
+	sys.stderr.write("Iteration %d \n" % (iter_num + 1))
+	input_line_index = -1
+	total_corpus_loss = 0
+	for line in open(args.input):
+		input_line_index += 1
+		sys.stderr.write('Line # %d\r' % input_line_index)
+
+		correct_czech = refs[input_line_index].decode("UTF-8").strip()
+
+		left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+
+		phrase_index = len(left_context.split())
+
+		left_context = left_context.strip().split()
+		right_context = right_context.strip().split()
+
+		if len(left_context) > 1:
+			prev = left_context[-1]
+			prev2 = left_context[-2]
+			prev = prev[:SL]
+			prev2 = prev2[:SL]
+		elif len(left_context) == 1:
+			prev = left_context[-1]
+			prev = prev[:SL]
+			prev2 = "<s>"
+		else:
+			prev = "<s>"
+			prev2 = "<s>"
+
+		if len(right_context) > 1:
+			Next = right_context[0]
+			Next = Next[:SL]
+			Next2 = right_context[1]
+			Next2 = Next2[:SL]
+		elif len(right_context) == 1:
+			Next = right_context[0]
+			Next = Next[:SL]
+			Next2 = "</s>"
+		else:
+			Next = "</s>"
+			Next2 = "</s>"
+
+
+		correct_weights = translation_table[phrase][correct_czech]
+
+		c1 = correct_weights["log_prob_tgs"] #, correct_weights["log_prob_sgt"], \
+		
+		phrase_stemmed = phrase[:SL]
+
+		correct_czech_stemmed = remove_accents(correct_czech[:SL])
+
+
+		POS = POS_list[input_line_index][phrase_index]
+
+		if len(left_context) > 1:
+			prev2POS = POS_list[input_line_index][phrase_index-2]
+			prevPOS = POS_list[input_line_index][phrase_index-1]
+		elif len(left_context) == 1:
+			prev2POS = "<s>"
+			prevPOS = POS_list[input_line_index][phrase_index-1]
+		else:
+			prev2POS = "<s>"
+			prevPOS = "<s>"
+
+		if len(right_context) > 1:
+			NextPOS = POS_list[input_line_index][phrase_index+1]
+			Next2POS = POS_list[input_line_index][phrase_index+2]
+		elif len(right_context) == 1:
+			NextPOS = POS_list[input_line_index][phrase_index+1]
+			Next2POS = "</s>"
+		else:
+			NextPOS = "</s>"
+			Next2POS = "</s>"
+
+
+		parrel = parents_list[input_line_index][phrase_index][1]
+		if parents_list[input_line_index][phrase_index][0] != None:
+			parPOS = POS_list[input_line_index][parents_list[input_line_index][phrase_index][0]]
+		else:
+			parPOS = "None"
+		
+		zeros_phr = np.zeros(len_phr)
+		zeros_prev = np.zeros(len_prev)
+		zeros_Next = np.zeros(len_Next)
+		zeros_other = np.zeros(len_root_ft_strings_1)
+		zeros_prev_POS = np.zeros(len_prev_POS)
+		zeros_Next_POS = np.zeros(len_Next_POS)
+		zeros_parentrel = np.zeros(len_parentrel)
+		zeros_parentPOS = np.zeros(len_parentPOS)
+		zeros_prev2 = np.zeros(len_prev2)
+		zeros_Next2 = np.zeros(len_Next2)
+		zeros_prevPOS_POS = np.zeros(len_prevPOS_POS)
+		zeros_NextPOS_POS = np.zeros(len_NextPOS_POS)
+
+		phrase_ft_str = "src:" + phrase + "_tgt:" + correct_czech
+		prev_ft_str = "src:" + phrase_stemmed + "_tgt:" + correct_czech_stemmed + "_prev:" + prev
+		Next_ft_str = "src:" + phrase_stemmed + "_tgt:" + correct_czech_stemmed + "_next:" + Next
+		root_ft_str = "root:" + phrase + remove_accents(correct_czech[-2:])
+		prev_POS_ft_str = "src:" + POS + "_tgt:" + correct_czech_stemmed + "_prev:" + prev
+		Next_POS_ft_str = "src:" + POS + "_tgt:" + correct_czech_stemmed + "_next:" + Next
+		parentrel_ft_str = "parentrel:" + parrel + correct_czech_stemmed[-2:]
+		parentPOS_ft_str = "parentPOS:" + parPOS + correct_czech_stemmed[-2:]
+		prev2_ft_str = "src:" + phrase + "_tgt:" + correct_czech_stemmed + "_prev2:" + prev2 + prev
+		Next2_ft_str = "src:" + phrase + "_tgt:" + correct_czech_stemmed + "_next2:" + Next + Next2
+		prevPOS_POS_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_prev:" + prev2POS + prevPOS
+		NextPOS_POS_ft_str = "src:" + phrase + "_tgt:" + correct_czech + "_next:" + NextPOS + Next2POS
+			
+		if phrase_ft_strings_dict.get(phrase_ft_str, 0) != 0:
+			zeros_phr[phrase_ft_strings_dict[phrase_ft_str]] = 1
+		if prev_ft_strings_dict.get(prev_ft_str, 0) != 0:
+			zeros_prev[prev_ft_strings_dict[prev_ft_str]] = 1
+		if Next_ft_strings_dict.get(Next_ft_str, 0) != 0:
+			zeros_Next[Next_ft_strings_dict[Next_ft_str]] = 1
+		if root_ft_strings_1_dict.get(root_ft_str, 0) != 0:
+			zeros_other[root_ft_strings_1_dict[root_ft_str]] = 1
+		if prev_POS_ft_strings_dict.get(prev_POS_ft_str, 0) != 0:
+			zeros_prev_POS[prev_POS_ft_strings_dict[prev_POS_ft_str]] = 1
+		if Next_POS_ft_strings_dict.get(Next_POS_ft_str, 0) != 0:
+			zeros_Next_POS[Next_POS_ft_strings_dict[Next_POS_ft_str]] = 1
+		if parentrel_ft_strings_dict.get(parentrel_ft_str, 0) != 0:
+			zeros_parentrel[parentrel_ft_strings_dict[parentrel_ft_str]] = 1
+		if parentPOS_ft_strings_dict.get(parentPOS_ft_str, 0) != 0:
+			zeros_parentPOS[parentPOS_ft_strings_dict[parentPOS_ft_str]] = 1
+		if prev2_ft_strings_dict.get(prev2_ft_str, 0) != 0:
+			zeros_prev2[prev2_ft_strings_dict[prev2_ft_str]] = 1
+		if Next2_ft_strings_dict.get(Next2_ft_str, 0) != 0:
+			zeros_Next2[Next2_ft_strings_dict[Next2_ft_str]] = 1
+		if prevPOS_POS_ft_strings_dict.get(prevPOS_POS_ft_str, 0) != 0:
+			zeros_prevPOS_POS[prevPOS_POS_ft_strings_dict[prevPOS_POS_ft_str]] = 1
+		if NextPOS_POS_ft_strings_dict.get(NextPOS_POS_ft_str, 0) != 0:
+			zeros_NextPOS_POS[NextPOS_POS_ft_strings_dict[NextPOS_POS_ft_str]] = 1
+
+		y_first_part = np.array([c1])
+		y = np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(y_first_part, zeros_phr), zeros_prev), zeros_Next), zeros_other), zeros_prev_POS), zeros_Next_POS), zeros_parentrel), zeros_parentPOS), zeros_prev2), zeros_Next2), zeros_prevPOS_POS), zeros_NextPOS_POS)
+
+		incorrect_translations = removekey(translation_table[phrase], correct_czech)
+		m = len(incorrect_translations)
+
+		x = np.zeros([m, (1+len_all)])
+
+		for n, incorrect_czech_word in enumerate(incorrect_translations.keys()):
+
+			incorrect_czech_word_stemmed = remove_accents(incorrect_czech_word[:SL])
+
+			zeros_phr = np.zeros(len_phr)
+			zeros_prev = np.zeros(len_prev)
+			zeros_Next = np.zeros(len_Next)
+			zeros_other = np.zeros(len_root_ft_strings_1)
+			zeros_prev_POS = np.zeros(len_prev_POS)
+			zeros_Next_POS = np.zeros(len_Next_POS)
+			zeros_parentrel = np.zeros(len_parentrel)
+			zeros_parentPOS = np.zeros(len_parentPOS)
+			zeros_prev2 = np.zeros(len_prev2)
+			zeros_Next2 = np.zeros(len_Next2)
+			zeros_prevPOS_POS = np.zeros(len_prevPOS_POS)
+			zeros_NextPOS_POS = np.zeros(len_NextPOS_POS)
+
+			wrong_phrase_ft_str = "src:" + phrase + "_tgt:" + incorrect_czech_word_stemmed
+			wrong_prev_ft_str = "src:" + phrase + "_tgt:" + incorrect_czech_word_stemmed + "_prev:" + prev
+			wrong_Next_ft_str = "src:" + phrase + "_tgt:" + incorrect_czech_word_stemmed + "_next:" + Next
+			wrong_root_ft_str = "root:" + phrase + remove_accents(incorrect_czech_word[-2:])
+			wrong_prev_POS_ft_str = "src:" + POS + "_tgt:" + incorrect_czech_word_stemmed + "_prev:" + prev
+			wrong_Next_POS_ft_str = "src:" + POS + "_tgt:" + incorrect_czech_word_stemmed + "_next:" + Next
+			wrong_parentrel_ft_str = "parentrel:" + parrel + incorrect_czech_word_stemmed[-2:]
+			wrong_parentPOS_ft_str = "parentPOS:" + parPOS + incorrect_czech_word_stemmed[-2:]
+			wrong_prev2_ft_str = "src:" + phrase + "_tgt:" + incorrect_czech_word_stemmed + "_prev:" + prev2 + prev
+			wrong_Next2_ft_str = "src:" + phrase + "_tgt:" + incorrect_czech_word_stemmed + "_next:" + Next + Next2
+			wrong_prevPOS_POS_ft_str = "src:" + phrase + "_tgt:" + incorrect_czech_word_stemmed + "_prev:" + prev2POS + prevPOS
+			wrong_NextPOS_POS_ft_str = "src:" + phrase + "_tgt:" + incorrect_czech_word_stemmed + "_next:" + NextPOS + Next2POS
+
+			if phrase_ft_strings_dict.get(wrong_phrase_ft_str, 0) != 0:
+				zeros_phr[phrase_ft_strings_dict[wrong_phrase_ft_str]] = 1
+			if prev_ft_strings_dict.get(wrong_prev_ft_str, 0) != 0:
+				zeros_prev[prev_ft_strings_dict[wrong_prev_ft_str]] = 1
+			if Next_ft_strings_dict.get(wrong_Next_ft_str, 0) != 0:
+				zeros_Next[Next_ft_strings_dict[wrong_Next_ft_str]] = 1
+			if root_ft_strings_1_dict.get(wrong_root_ft_str, 0) != 0:
+				zeros_other[root_ft_strings_1_dict[wrong_root_ft_str]] = 1
+			if prev_POS_ft_strings_dict.get(wrong_prev_POS_ft_str, 0) != 0:
+				zeros_prev_POS[prev_POS_ft_strings_dict[wrong_prev_POS_ft_str]] = 1
+			if Next_POS_ft_strings_dict.get(wrong_Next_POS_ft_str, 0) != 0:
+				zeros_Next_POS[Next_POS_ft_strings_dict[wrong_Next_POS_ft_str]] = 1
+			if parentrel_ft_strings_dict.get(wrong_parentrel_ft_str, 0) != 0:
+				zeros_parentrel[parentrel_ft_strings_dict[wrong_parentrel_ft_str]] = 1
+			if parentPOS_ft_strings_dict.get(wrong_parentPOS_ft_str, 0) != 0:
+				zeros_parentPOS[parentPOS_ft_strings_dict[wrong_parentPOS_ft_str]] = 1
+			if prev2_ft_strings_dict.get(wrong_prev2_ft_str, 0) != 0:
+				zeros_prev2[prev2_ft_strings_dict[wrong_prev2_ft_str]] = 1
+			if Next2_ft_strings_dict.get(wrong_Next2_ft_str, 0) != 0:
+				zeros_Next2[Next2_ft_strings_dict[wrong_Next2_ft_str]] = 1
+			if prevPOS_POS_ft_strings_dict.get(wrong_prevPOS_POS_ft_str, 0) != 0:
+				zeros_prevPOS_POS[prevPOS_POS_ft_strings_dict[wrong_prevPOS_POS_ft_str]] = 1
+			if NextPOS_POS_ft_strings_dict.get(wrong_NextPOS_POS_ft_str, 0) != 0:
+				zeros_NextPOS_POS[NextPOS_POS_ft_strings_dict[wrong_NextPOS_POS_ft_str]] = 1
+
+
+			in1 = incorrect_translations[incorrect_czech_word]["log_prob_tgs"] #, incorrect_translations[incorrect_czech_word]["log_prob_sgt"], \
+
+			temp_array = np.array([in1])
+
+			x[n] = np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(temp_array, zeros_phr), zeros_prev), zeros_Next), zeros_other), zeros_prev_POS), zeros_Next_POS), zeros_parentrel), zeros_parentPOS), zeros_prev2), zeros_Next2), zeros_prevPOS_POS), zeros_NextPOS_POS)
+
+		loss_on_sentence = sum([max(0, (gamma - (np.dot((y - x[i]), w)))) for i in range(m)])
+		total_corpus_loss += loss_on_sentence
+
+		if loss_on_sentence > 0:
+			
+			k = sum([Loss(x[i], y, w, gamma) != 0 for i in range(x.shape[0])])
+
+			new_gradient = sum([(x[i] - y) for i in range(x.shape[0]) if Loss(x[i], y, w, gamma) != 0]) # * (1.0/k)
+			w = np.subtract(w, (alpha * new_gradient))
+
+	total_loss_table[iter_num] = total_corpus_loss
+	w_table[iter_num] = w[:1]
+
+
+sys.stderr.write("%s\n" % str(total_loss_table))
+sys.stderr.write("%s\n" % str(w_table))
+
+final_weights = w
+final_weights = scipy.sparse.csr_matrix(final_weights)
+final_weights = final_weights.T
+
+def update_ttable(filename):
+	translation_table = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+	print >>sys.stderr, 'Reading ttable from %s...' % filename
+	with open(filename) as f:
+		for i, line in enumerate(f):
+			source, target, features = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+			first_features = np.array([float(v) for v in features.split()])[0]
+		
+			zeros_phr = np.zeros(len_phr)
+			zeros_prev = np.zeros(len_prev)
+			zeros_Next = np.zeros(len_Next)
+			zeros_other = np.zeros(len_root_ft_strings_1)
+			zeros_prev_POS = np.zeros(len_prev_POS)
+			zeros_Next_POS = np.zeros(len_Next_POS)
+			zeros_parentrel = np.zeros(len_parentrel)
+			zeros_parentPOS = np.zeros(len_parentPOS)
+			zeros_prev2 = np.zeros(len_prev2)
+			zeros_Next2 = np.zeros(len_Next2)
+			zeros_prevPOS_POS = np.zeros(len_prevPOS_POS)
+			zeros_NextPOS_POS = np.zeros(len_NextPOS_POS)
+
+			candidate = "src:" + source[:SL] + "_tgt:" + remove_accents(target[:SL])
+
+			if incomplete_phrase_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_phr[incomplete_phrase_ft_strings_dict[candidate]] = 1
+
+			if incomplete_prev_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_prev[incomplete_prev_ft_strings_dict[candidate]] = 1
+			if incomplete_Next_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_Next[incomplete_Next_ft_strings_dict[candidate]] = 1
+
+			if incomplete_root_ft_strings_1_dict.get(candidate, 0) != 0:
+				zeros_other[incomplete_root_ft_strings_1_dict[candidate]] = 1
+
+			if incomplete_prev_POS_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_prev_POS[incomplete_prev_POS_ft_strings_dict[candidate]] = 1
+			if incomplete_Next_POS_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_Next_POS[incomplete_Next_POS_ft_strings_dict[candidate]] = 1
+
+			if incomplete_parentrel_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_parentrel[incomplete_parentrel_ft_strings_dict[candidate]] = 1
+			if incomplete_parentPOS_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_parentPOS[incomplete_parentPOS_ft_strings_dict[candidate]] = 1
+
+			if incomplete_prev2_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_prev2[incomplete_prev2_ft_strings_dict[candidate]] = 1
+			if incomplete_Next2_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_Next2[incomplete_Next2_ft_strings_dict[candidate]] = 1
+
+			if incomplete_prevPOS_POS_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_prevPOS_POS[incomplete_prevPOS_POS_ft_strings_dict[candidate]] = 1
+			if incomplete_NextPOS_POS_ft_strings_dict.get(candidate, 0) != 0:
+				zeros_NextPOS_POS[incomplete_NextPOS_POS_ft_strings_dict[candidate]] = 1
+
+			features = np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(np.append(first_features, zeros_phr), zeros_prev), zeros_Next), zeros_other), zeros_prev_POS), zeros_Next_POS), zeros_parentrel), zeros_parentPOS), zeros_prev2), zeros_Next2), zeros_prevPOS_POS), zeros_NextPOS_POS)
+			features = scipy.sparse.csr_matrix(features)
+
+			translation_table[source][target] = features
+			sys.stderr.write('%d\r' % i)
+	print >>sys.stderr
+	return translation_table
+
+updated_translation_table = update_ttable(args.ttable)
+
+
+with open("data/dev+test.input") as f:
+	for i, line in enumerate(f):
+		sys.stderr.write("Calculating line %d \r" % i)
+		left_context, phrase, right_context = [part.strip() for part in line.decode('utf-8').strip().split('|||')]
+		candidates = [target for target, features in sorted(updated_translation_table[phrase].iteritems(), key=lambda (t, f): f.dot(final_weights)[(0,0)], reverse=True)]
+		print ' ||| '.join(candidates).encode('utf-8')
